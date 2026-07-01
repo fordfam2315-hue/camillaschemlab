@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Input & Output Tracker</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f5f5fa;
+    margin: 0;
+    padding: 16px;
+    color: #222;
+  }
+  .app {
+    max-width: 760px;
+    margin: auto;
+    background: white;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 8px 25px rgba(0,0,0,.08);
+  }
+  h1 { text-align: center; margin-top: 0; }
+  .notice {
+    background: #fff3cd;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.4;
+    margin-bottom: 12px;
+  }
+  .totals {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .box {
+    border-radius: 16px;
+    padding: 16px;
+    text-align: center;
+    background: #eeeeff;
+  }
+  .box strong {
+    display: block;
+    font-size: 30px;
+    margin-top: 6px;
+  }
+  button {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 14px;
+    margin: 6px 0;
+    font-size: 17px;
+    font-weight: bold;
+  }
+  .voice { background: #222; color: white; }
+  .inputBtn { background: #dff5e3; }
+  .outputBtn { background: #e5e0ff; }
+  .clear { background: #ffdede; }
+  .export { background: #ddeeff; }
+  input, select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid #bbb;
+    margin: 6px 0;
+    font-size: 16px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  #status {
+    text-align: center;
+    font-weight: bold;
+    margin: 10px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+  }
+  th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 9px;
+    font-size: 14px;
+    text-align: left;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Input & Output Tracker</h1>
+
+  <div class="notice">
+    <b>Voice note:</b> Voice works best when this file is opened in Safari or Chrome, not inside the ChatGPT app preview.
+    You can still use the manual buttons below.
+  </div>
+
+  <div class="totals">
+    <div class="box">Input Total<strong id="inputTotal">0 mL</strong></div>
+    <div class="box">Output Total<strong id="outputTotal">0 mL</strong></div>
+  </div>
+
+  <button class="voice" onclick="startVoice()">🎤 Try Voice Entry</button>
+  <div id="status">Ready</div>
+
+  <h3>Fast Entry</h3>
+  <div class="row">
+    <button class="inputBtn" onclick="quickAdd('input', 240, '8 oz drink')">+ 8 oz Input</button>
+    <button class="inputBtn" onclick="quickAdd('input', 120, '4 oz drink')">+ 4 oz Input</button>
+  </div>
+  <div class="row">
+    <button class="outputBtn" onclick="quickAdd('output', 300, 'urine')">+ 300 mL Output</button>
+    <button class="outputBtn" onclick="quickAdd('output', 500, 'urine')">+ 500 mL Output</button>
+  </div>
+
+  <h3>Custom Entry</h3>
+  <select id="type">
+    <option value="input">Input</option>
+    <option value="output">Output</option>
+  </select>
+  <input id="amount" type="number" placeholder="Amount" />
+  <select id="unit">
+    <option value="ml">mL</option>
+    <option value="oz">ounces</option>
+  </select>
+  <input id="note" type="text" placeholder="Note, like water, juice, urine" />
+  <button onclick="addManual()">Add Custom Entry</button>
+
+  <button class="export" onclick="downloadCSV()">Download Log</button>
+  <button class="clear" onclick="clearAll()">Clear All</button>
+
+  <h3>Today’s Log</h3>
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Type</th><th>Amount</th><th>Note</th></tr>
+    </thead>
+    <tbody id="log"></tbody>
+  </table>
+</div>
+
+<script>
+let entries = JSON.parse(localStorage.getItem("ioTrackerEntriesV2") || "[]");
+
+function ozToMl(oz) {
+  return Math.round(oz * 29.5735);
+}
+
+function save() {
+  localStorage.setItem("ioTrackerEntriesV2", JSON.stringify(entries));
+}
+
+function addEntry(type, ml, note) {
+  entries.push({
+    date: new Date().toLocaleDateString(),
+    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+    type,
+    ml: Math.round(ml),
+    note: note || ""
+  });
+  save();
+  render();
+}
+
+function quickAdd(type, ml, note) {
+  addEntry(type, ml, note);
+}
+
+function addManual() {
+  const type = document.getElementById("type").value;
+  const amount = Number(document.getElementById("amount").value);
+  const unit = document.getElementById("unit").value;
+  const note = document.getElementById("note").value;
+
+  if (!amount || amount <= 0) {
+    alert("Enter a valid amount.");
+    return;
+  }
+
+  const ml = unit === "oz" ? ozToMl(amount) : amount;
+  addEntry(type, ml, note);
+
+  document.getElementById("amount").value = "";
+  document.getElementById("note").value = "";
+}
+
+function render() {
+  let inputTotal = 0;
+  let outputTotal = 0;
+  const log = document.getElementById("log");
+  log.innerHTML = "";
+
+  entries.forEach(e => {
+    if (e.type === "input") inputTotal += e.ml;
+    if (e.type === "output") outputTotal += e.ml;
+  });
+
+  document.getElementById("inputTotal").textContent = inputTotal + " mL";
+  document.getElementById("outputTotal").textContent = outputTotal + " mL";
+
+  [...entries].reverse().forEach(e => {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td>${e.time}</td><td>${e.type}</td><td>${e.ml} mL</td><td>${e.note}</td>`;
+    log.appendChild(row);
+  });
+}
+
+function clearAll() {
+  if (confirm("Clear all entries?")) {
+    entries = [];
+    save();
+    render();
+  }
+}
+
+function downloadCSV() {
+  let csv = "Date,Time,Type,Amount mL,Note\n";
+  entries.forEach(e => {
+    csv += `"${e.date}","${e.time}","${e.type}","${e.ml}","${e.note}"\n`;
+  });
+
+  const blob = new Blob([csv], {type: "text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "input-output-log.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function startVoice() {
+  const status = document.getElementById("status");
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    status.textContent = "Voice is not supported here. Open in Safari or Chrome.";
+    alert("Voice is not supported in this view. Open the file in Safari or Chrome, or use the manual buttons.");
+    return;
+  }
+
+  try {
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    status.textContent = "Listening... say: input 8 ounces or output 300 milliliters";
+    recognition.start();
+
+    recognition.onresult = function(event) {
+      const spoken = event.results[0][0].transcript.toLowerCase();
+      status.textContent = "Heard: " + spoken;
+
+      let type = "";
+      if (spoken.includes("input") || spoken.includes("intake") || spoken.includes("drink")) type = "input";
+      if (spoken.includes("output") || spoken.includes("urine") || spoken.includes("pee")) type = "output";
+
+      const match = spoken.match(/(\d+(\.\d+)?)/);
+      const amount = match ? Number(match[0]) : 0;
+
+      let ml = amount;
+      if (spoken.includes("ounce") || spoken.includes("ounces") || spoken.includes("oz")) {
+        ml = ozToMl(amount);
+      }
+
+      if (!type || !amount) {
+        status.textContent = "I heard you, but could not find input/output and an amount.";
+        alert("Try saying: input 8 ounces, or output 300 milliliters.");
+        return;
+      }
+
+      addEntry(type, ml, spoken);
+      status.textContent = `Added ${type}: ${Math.round(ml)} mL`;
+    };
+
+    recognition.onerror = function(event) {
+      status.textContent = "Voice error: " + event.error;
+      alert("Voice error: " + event.error + ". Try opening in Safari or Chrome, not inside ChatGPT.");
+    };
+
+  } catch (err) {
+    status.textContent = "Voice failed to start.";
+    alert("Voice failed to start. Open in Safari or Chrome, or use manual entry.");
+  }
+}
+
+render();
+</script>
+</body>
+</html>
